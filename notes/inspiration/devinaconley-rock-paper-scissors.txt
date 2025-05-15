@@ -1,0 +1,2402 @@
+Directory structure:
+└── devinaconley-rock-paper-scissors/
+    ├── README.md
+    ├── dev.py
+    ├── environment.yml
+    ├── LICENSE
+    ├── requirements.txt
+    ├── vercel.json
+    ├── .env.template
+    ├── .vercelignore
+    ├── api/
+    │   ├── index.py
+    │   ├── models.py
+    │   ├── render.py
+    │   ├── rps.py
+    │   ├── storage.py
+    │   └── static/
+    ├── supabase/
+    │   ├── seed.sql
+    │   ├── .gitignore
+    │   └── migrations/
+    │       ├── 00000000000001_create_table_tournament.sql
+    │       ├── 00000000000002_create_table_match.sql
+    │       └── 00000000000003_create_table_move.sql
+    └── test/
+        ├── __init__.py
+        ├── test_match.py
+        └── test_tournament.py
+
+================================================
+FILE: README.md
+================================================
+# rock-paper-scissors
+global game of rock paper scissors on farcaster
+
+the backend is written in flask and deployed on vercel, the frontend is rendered via farcaster frames
+
+it uses [framelib](https://github.com/devinaconley/python-frames) for all frame logic, validation, and rendering
+
+
+## setup
+
+setup a conda (or other virtual) environment
+```
+conda env update -f environment.yml
+conda activate rock-paper-scissors
+```
+
+setup vercel
+```
+npm install vercel
+```
+
+
+## development
+
+run unit tests
+```
+pytest -v -s
+```
+
+run local app
+```
+npx vercel dev
+```
+
+you can run the frame debugger provided by [frames.js](https://github.com/framesjs/frames.js) to test locally
+
+
+## deployment
+
+import project to [vercel](https://vercel.com/) with the flask framework
+
+register with [neynar](https://neynar.com/) to get an api key
+
+create a [supabase](https://supabase.com/) project and create database tables using the ddl commands in `supabase/migrations/`
+
+define the environment variables `NEYNAR_KEY`, `SUPABASE_URL`, and `SUPABASE_KEY` in your vercel project settings
+
+deploy via vercel dashboard or automation
+
+
+
+================================================
+FILE: dev.py
+================================================
+"""
+dev script for image rendering
+"""
+
+import time
+import requests
+from framelib import get_user
+
+from api.models import Match, Result, MatchStatus, MatchState, Gesture
+from api.render import render_match, render_bracket
+from api.storage import get_supabase, get_matches_count
+from api.rps import get_final_bracket
+
+
+def main():
+    # render_test_match()
+    render_test_bracket()
+    # find_degen_matches()
+
+
+def render_test_match():
+    now = time.time()
+    u0 = get_user(8268)
+    u1 = get_user(12224)
+    m = Match(
+        id='1234', created=now, updated=now, tournament=1, round=5, slot=33,
+        user0=u0.fid, user1=u1.fid,
+        result=Result.PENDING, winner=None, loser=None
+    )
+    s = MatchState(
+        match='1234', turn=1, status=MatchStatus.DRAW, winner=None, loser=None,
+        history0=[Gesture.ROCK],
+        history1=[Gesture.ROCK]
+    )
+    is_user0 = True
+    # u1 = None
+    print(u0)
+    print(u1)
+    render_match(m, u0 if is_user0 else u1, u1 if is_user0 else u0, m.round, s, 7215)
+
+
+def render_test_bracket():
+    s = get_supabase()
+    bracket = get_final_bracket(s, 5, 32)
+    print(bracket)
+    users = {}
+    for _, r in bracket.items():
+        for _, m in r.items():
+            if m.user0 not in users:
+                users[m.user0] = get_user(m.user0)
+            if m.user1 not in users:
+                users[m.user1] = get_user(m.user1)
+
+    render_bracket(bracket, users, 5)
+
+
+def find_degen_matches():
+    tournament = 1
+    round_ = 13
+    base = 'https://tournament.network/match'
+    base_degen = 'https://degen.tips/api/airdrop2'
+    for i in range(0, 32):
+        print(i)
+        slot = f'{base}/{tournament}/{round_}/{i}'
+        while 1:
+            r = requests.get(slot)
+            if r.status_code == 200:
+                break
+        body = r.json()
+        # print(body)
+        fid0 = body['match']['user0']
+        fid1 = body['match']['user1']
+        slot = body['match']['slot']
+
+        r = requests.get(f'{base_degen}/tip-allowance?fid={fid0}')
+        b0 = r.json()
+        if not b0:
+            continue
+        addr0 = b0[0]['wallet_address']
+        r = requests.get(f'{base_degen}/season1/points?address={addr0}')
+        b0 = r.json()
+        if not b0:
+            continue
+        p0 = int(b0[0]['points'])
+        # print(p0)
+        if p0 < 1000:
+            continue
+
+        r = requests.get(f'{base_degen}/tip-allowance?fid={fid1}')
+        b1 = r.json()
+        if not b1:
+            continue
+        addr1 = b1[0]['wallet_address']
+        r = requests.get(f'{base_degen}/season1/points?address={addr1}')
+        b1 = r.json()
+        if not b1:
+            continue
+        p1 = int(b1[0]['points'])
+        # print(p1)
+        if p1 < 1000:
+            continue
+
+        print(f'DEGEN MATCHUP: {slot}, {fid0} v. {fid1}, points {p0} {p1}')
+
+
+if __name__ == '__main__':
+    main()
+
+
+
+================================================
+FILE: environment.yml
+================================================
+name: rock-paper-scissors
+channels:
+  - defaults
+dependencies:
+  - ca-certificates
+  - ncurses
+  - openssl
+  - pip=23.3.1
+  - python=3.9.18
+  - readline
+  - setuptools
+  - sqlite
+  - tk
+  - tzdata
+  - wheel
+  - xz
+  - zlib
+  - pip:
+      - flask~=3.0.2
+      - framelib~=0.0.4
+      - numpy
+      - opencv-python~=4.9.0.80
+      - pydantic
+      - pytest~=8.0.0
+      - python-dotenv~=1.0.1
+      - requests~=2.31.0
+      - supabase~=2.3.4
+prefix: /home/devin/miniconda3/envs/rock-paper-scissors
+
+
+
+================================================
+FILE: LICENSE
+================================================
+MIT License
+
+Copyright (c) 2024 Devin A. Conley
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+
+================================================
+FILE: requirements.txt
+================================================
+# requirements.txt
+Flask~=3.0.1
+framelib~=0.0.4
+opencv-python-headless~=4.9.0.80
+pydantic
+python-dotenv~=1.0.1
+requests~=2.31.0
+supabase~=2.3.4
+
+
+
+================================================
+FILE: vercel.json
+================================================
+{
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/api/index"
+    }
+  ]
+}
+
+
+================================================
+FILE: .env.template
+================================================
+# .env // template
+SUPABASE_URL=
+SUPABASE_KEY=
+NEYNAR_KEY=
+
+
+
+================================================
+FILE: .vercelignore
+================================================
+# .vercelignore
+supabase
+test
+
+
+
+================================================
+FILE: api/index.py
+================================================
+"""
+main entry point for rock paper scissors app
+"""
+# lib
+import os
+import time
+from flask import Flask, url_for, make_response, jsonify
+from framelib import frame, message, error, get_user, validate_message_or_mock_neynar
+
+# src
+from .storage import get_supabase, get_current_tournament, get_tournament, get_match
+from .models import Gesture, MatchState, MatchStatus, MessageCode, Result, Tournament
+from .rps import (
+    get_round_settled,
+    current_round,
+    current_round_end,
+    round_size,
+    total_rounds,
+    get_match_user,
+    get_match_user_last,
+    get_match_state,
+    get_match_slot,
+    submit_move,
+    remaining_users,
+    update_match_result,
+    ROUND_BUFFER,
+    get_final_bracket
+)
+from .render import render_home, render_match, render_message, render_bracket
+
+app = Flask(__name__)
+
+
+class BadRequest(Exception):
+    pass
+
+
+@app.errorhandler(BadRequest)
+def handle_invalid_usage(e):
+    print(e)
+    return error(str(e), status=403)
+
+
+# ---- core frame views ----
+
+@app.route('/', methods=['GET', 'POST'])
+def home():
+    # tournament status home page
+    s = get_supabase()
+    t = get_current_tournament(s)
+
+    return frame(
+        title='farcaster rock paper scissors',
+        image=url_for('home_image', _external=True, tournament=t.id),
+        content='welcome to rock paper scissors!',
+        post_url=url_for('match', _external=True),
+        button1='play \U00002694\U0000fe0f',
+        button2='bracket \U0001F3C6',
+        button2_target=url_for('bracket', _external=True),
+        max_age=900
+    )
+
+
+@app.route('/match', methods=['POST'])
+def match():
+    # note: consider this an unauthenticated endpoint
+
+    # get current tournament/round
+    # get user match
+    # get match state
+    # render current match status
+    # show emoji buttons if they can play, else back
+
+    # parse action message
+    msg = message()
+    print(msg)
+
+    # tournament state
+    now = time.time()
+    s = get_supabase()
+    t = get_current_tournament(s)
+    r = current_round(int(t.start.timestamp()), int(now))
+    end = current_round_end(int(t.start.timestamp()), r)
+
+    if r < 0:
+        return frame(
+            title='tournament not started',
+            image=url_for('message_image', _external=True, code=MessageCode.NOT_STARTED.value),
+            post_url=url_for('home', _external=True),
+            button1='\U0001F519'  # back
+        )
+
+    if msg.untrustedData.fid > t.size:
+        print(f'fid {msg.untrustedData.fid} not competing')
+        return frame(
+            title='not entered',
+            image=url_for('message_image', _external=True, code=MessageCode.NOT_ENTERED.value),
+            post_url=url_for('home', _external=True),
+            button1='\U0001F519'  # back
+        )
+
+    m, state = get_match_user(s, int(now), t.id, t.size, r, msg.untrustedData.fid)
+    print(m)
+    print(state)
+    if m is None:
+        m = get_match_user_last(s, t.id, msg.untrustedData.fid)
+        print(f'last match {m.id}')
+        return frame(
+            title='your last match',
+            image=url_for('match_image', _external=True, tournament=t.id, round_=m.round, slot=m.slot, turn=0,
+                          user=msg.untrustedData.fid, status=MatchStatus.SETTLED.value),
+            post_url=url_for('home', _external=True),
+            button1='\U0001F519'  # back
+        )
+
+    if ((state.status == MatchStatus.USER_0_PLAYED and msg.untrustedData.fid == m.user0)
+            or (state.status == MatchStatus.USER_1_PLAYED and msg.untrustedData.fid == m.user1)):
+        print('you played a move waiting on opponent')
+        return frame(
+            title='waiting on opponent',
+            image=url_for('match_image', _external=True, tournament=t.id, round_=r, slot=m.slot, turn=state.turn,
+                          user=msg.untrustedData.fid, status=state.status.value),
+            post_url=url_for('home', _external=True),
+            button1='\U0001F519'  # back
+        )
+
+    elif m.result in {Result.BYE, Result.PLAYED} or state.status == MatchStatus.SETTLED:
+        print(f'settled: {m.result}')
+        return frame(
+            title='match settled',
+            image=url_for('match_image', _external=True, tournament=t.id, round_=r, slot=m.slot, turn=state.turn,
+                          user=msg.untrustedData.fid, status=state.status.value),
+            post_url=url_for('home', _external=True),
+            button1='\U0001F519'  # back
+        )
+
+    elif state.status == MatchStatus.DRAW and (end - now) < ROUND_BUFFER:
+        print(f'draw in buffer window: {state}')
+        return frame(
+            title='match draw',
+            image=url_for('match_image', _external=True, tournament=t.id, round_=r, slot=m.slot, turn=state.turn,
+                          user=msg.untrustedData.fid, status=state.status.value),
+            post_url=url_for('home', _external=True),
+            button1='\U0001F519'  # back
+        )
+
+    # else user needs to play (NEW, OPPONENT_PLAYED, DRAW)
+    return frame(
+        title='match info',
+        image=url_for('match_image', _external=True, tournament=t.id, round_=r, slot=m.slot, turn=state.turn,
+                      user=msg.untrustedData.fid, status=state.status.value),
+        content='rock paper scissors current matchup',
+        post_url=url_for('move', _external=True),
+        button1='\U0001F5FF',  # rock
+        button2='\U0001f4c3',  # paper
+        button3='\U00002702\U0000fe0f',  # scissors
+    )
+
+
+@app.route('/move', methods=['POST'])
+def move():
+    msg = message()
+    print(msg)
+
+    # verify game state (turn unplayed)
+    now = time.time()
+    s = get_supabase()
+    t = get_current_tournament(s)
+    r = current_round(int(t.start.timestamp()), int(now))
+    end = current_round_end(int(t.start.timestamp()), r)
+
+    if msg.untrustedData.fid > t.size:
+        raise BadRequest(f'fid {msg.untrustedData.fid} not competing')
+
+    sz = round_size(t.size, r)
+    if sz < 2:
+        raise BadRequest('tournament over')
+
+    m, state = get_match_user(s, int(now), t.id, t.size, r, msg.untrustedData.fid)
+    if m is None:
+        raise BadRequest(f'fid {msg.untrustedData.fid} has been eliminated')
+    print(state)
+
+    if state.status == MatchStatus.SETTLED:
+        raise BadRequest(f'match {m.id} already settled, winner {m.winner}')
+
+    if ((state.status == MatchStatus.USER_0_PLAYED and msg.untrustedData.fid == m.user0)
+            or (state.status == MatchStatus.USER_1_PLAYED and msg.untrustedData.fid == m.user1)):
+        raise BadRequest(f'{msg.untrustedData.fid} already played a move for match {m.id} turn {state.turn}')
+
+    elif state.status == MatchStatus.DRAW and (end - now) < ROUND_BUFFER:
+        raise BadRequest(f'cannot start a new turn {state.turn} for match {m.id} inside of round buffer window {now}')
+
+    # authenticate action here
+    key = os.getenv('NEYNAR_KEY')
+    env = os.getenv('VERCEL_ENV')
+    local = env is None or env == 'development'
+    try:
+        action = validate_message_or_mock_neynar(msg, key, mock=local)
+    except ValueError as e:
+        raise BadRequest(f'invalid message! {e}, {msg.model_dump_json()}')
+
+    g = Gesture(action.tapped_button.index)
+    print(f'played: {g}')
+
+    # submit action
+    submit_move(s, int(now), m.id, action.interactor.fid, state.turn, g, msg.trustedData.messageBytes)
+
+    return frame(
+        title='you played a move!',
+        image=url_for('match_image', _external=True, tournament=t.id, round_=r, slot=m.slot, turn=state.turn + 1,
+                      user=action.interactor.fid, status=MatchStatus.NEW.value),
+        content='you played a move!',
+        post_url=url_for('home', _external=True),
+        button1='\U0001F519'  # back
+    )
+
+
+# ---- auxiliary frame views ----
+
+def _validate_slot(now: int, tournament: Tournament, round_: int, slot: int):
+    r = current_round(int(tournament.start.timestamp()), now)
+    if round_ < 0:
+        raise BadRequest(f'invalid round {round_}')
+    if round_ > r:
+        raise BadRequest(f'future round {round_}')
+
+    sz = round_size(tournament.size, round_)
+    if slot >= sz / 2:
+        raise BadRequest(f'invalid slot {slot} for tournament {tournament} round {round_}')
+
+
+@app.route('/spectate/<int:tournament>/<int:round_>/<int:slot>', methods=['GET', 'POST'])
+def spectate(tournament: int, round_: int, slot: int):
+    # validate match slot
+    now = time.time()
+    s = get_supabase()
+    t = get_tournament(s, tournament)
+    if t is None:
+        raise BadRequest(f'invalid tournament {tournament}')
+
+    _validate_slot(int(now), t, round_, slot)
+
+    # get match and state
+    m, state = get_match_slot(s, int(now), t.id, t.size, round_, round_, slot)
+    if state is None:
+        state = get_match_state(s, m)
+
+    return frame(
+        title='spectating',
+        image=url_for('match_image', _external=True, tournament=t.id, round_=round_, slot=m.slot, turn=state.turn,
+                      user=min(m.user0, m.user1), status=state.status.value),
+        content=f'spectating {m.id}',
+        post_url=url_for('spectate', _external=True, tournament=t.id, round_=round_, slot=slot),
+        button1='\U0001F504'  # refresh
+    )
+
+
+@app.route('/bracket', methods=['GET', 'POST'])
+def bracket():
+    s = get_supabase()
+    t = get_current_tournament(s)
+
+    return frame(
+        title='bracket',
+        image=url_for('bracket_image', _external=True, tournament=t.id),
+        content=f'bracket {t.id}',
+        post_url=url_for('home', _external=True),
+        button1='\U0001F519',  # back
+        max_age=300
+    )
+
+
+# ---- json info endpoints ----
+@app.route('/match/<int:fid>', methods=['GET'])
+def info_get_match_fid(fid: int):
+    # tournament state
+    now = time.time()
+    s = get_supabase()
+    t = get_current_tournament(s)
+    r = current_round(int(t.start.timestamp()), int(now))
+
+    if r < 0:
+        return jsonify({'msg': 'tournament not started'})
+
+    if fid > t.size:
+        return jsonify({'msg': f'fid {fid} not competing'})
+
+    # get current or latest match
+    m, state = get_match_user(s, int(now), t.id, t.size, r, fid)
+    if m is None:
+        m = get_match_user_last(s, t.id, fid)
+        return jsonify({'msg': f'last {m.id}', 'match': m.model_dump(mode='json')})
+
+    return jsonify({
+        'msg': f'current match {fid} {m.id}',
+        'match': m.model_dump(mode='json'),
+        'state': state.model_dump(mode='json')
+    })
+
+
+@app.route('/match/<int:tournament>/<int:round_>/<int:slot>', methods=['GET'])
+def info_get_match_slot(tournament: int, round_: int, slot: int):
+    # validate match slot
+    now = time.time()
+    s = get_supabase()
+    t = get_tournament(s, tournament)
+    if t is None:
+        raise BadRequest(f'invalid tournament {tournament}')
+
+    _validate_slot(int(now), t, round_, slot)
+
+    # get match and state
+    m, state = get_match_slot(s, int(now), t.id, t.size, round_, round_, slot)
+    if state is None:
+        state = get_match_state(s, m)
+
+    return jsonify({
+        'msg': f'match slot {tournament} {round_} {slot}',
+        'match': m.model_dump(mode='json'),
+        'state': state.model_dump(mode='json')
+    })
+
+
+# ---- image rendering endpoints ----
+
+@app.route('/render/tournament/<int:tournament>/im.png')
+@app.route('/render/tournament/<int:tournament>/<int:timestamp>/im.png')
+def home_image(tournament: int, timestamp: int = None):
+    print(f'requesting image render for tournament {tournament} {timestamp}')
+    s = get_supabase()
+    t = get_tournament(s, tournament)
+    if t is None:
+        raise BadRequest(f'invalid tournament {tournament}')
+
+    # get tournament state
+    now = time.time()
+    r = current_round(int(t.start.timestamp()), int(now))
+    sz = round_size(t.size, r)
+    if r < 0:
+        # not started yet
+        r_settled = 0
+        remaining = t.size
+    elif sz < 2:
+        # tournament over
+        r = total_rounds(t.size) - 1
+        r_settled = 0
+        remaining = 1
+    else:
+        r_settled = get_round_settled(s, t.id, r)
+        remaining = remaining_users(t.size, r, r_settled)
+    prize = '500k $DEGEN'  # TODO get bounty live
+    print(f'tournament {tournament}, size {t.size}, round {r}, settled {r_settled}, remaining {remaining}')
+
+    # render image
+    res = make_response(render_home(t.id, t.size, r, prize, remaining))
+    res.headers.set('Content-Type', 'image/png')
+    res.cache_control.max_age = 900
+    return res
+
+
+@app.route('/render/match/<int:tournament>/<int:round_>/<int:slot>/<int:turn>/<int:user>/<int:status>/im.png')
+def match_image(tournament: int, round_: int, slot: int, turn: int, user: int, status: int):
+    # get match
+    now = time.time()
+    s = get_supabase()
+    t = get_tournament(s, tournament)
+    if t is None:
+        raise BadRequest(f'invalid tournament {tournament}')
+    m = get_match(s, tournament, round_, slot)
+    if m is None:
+        raise BadRequest(f'invalid match {tournament} {round_} {slot}')
+    if user == 0:
+        raise BadRequest('invalid user 0')
+    if user == m.user0:
+        u = True
+    elif user == m.user1:
+        u = False
+    else:
+        raise BadRequest(f'invalid user {m.id} {user}')
+
+    # get match state (with lazy scoring)
+    status = MatchStatus(status)
+    m, state = update_match_result(s, int(now), round_, m)
+    if state is None:
+        state = get_match_state(s, m)
+    end = current_round_end(int(t.start.timestamp()), round_)
+
+    # get user info
+    u0 = get_user(m.user0)
+    u1 = get_user(m.user1) if m.user1 > 0 else None
+
+    # render image
+    res = make_response(render_match(m, u0 if u else u1, u1 if u else u0, round_, state, end - int(now)))
+    res.headers.set('Content-Type', 'image/png')
+    return res
+
+
+@app.route('/render/message/<int:code>/im.png')
+def message_image(code: int):
+    # render image
+    msg = MessageCode(code)
+    if msg == MessageCode.NOT_STARTED:
+        b = render_message(line0='The tournament has not started yet.', line1='Check back soon!')
+    elif msg == MessageCode.NOT_ENTERED:
+        b = render_message(line0='You were not entered in this tournament.', line1='Check back soon!')
+    else:
+        raise BadRequest(f'invalid msg {msg}')
+
+    # response
+    res = make_response(b)
+    res.headers.set('Content-Type', 'image/png')
+    return res
+
+
+@app.route('/render/bracket/<int:tournament>/im.png')
+def bracket_image(tournament: int):
+    # get tournament
+    s = get_supabase()
+    t = get_tournament(s, tournament)
+    if t is None:
+        raise BadRequest(f'invalid tournament {tournament}')
+    now = time.time()
+    r = current_round(int(t.start.timestamp()), int(now))
+
+    # get bracket
+    bracket_matches = get_final_bracket(s, t.id, t.size)
+
+    # get user profiles
+    users = {}
+    for _, bracket_round in bracket_matches.items():
+        for _, m in bracket_round.items():
+            if m.user0 not in users:
+                users[m.user0] = get_user(m.user0)
+            if m.user1 not in users:
+                users[m.user1] = get_user(m.user1)
+
+    # render image
+    res = make_response(render_bracket(bracket_matches, users, r))
+    res.headers.set('Content-Type', 'image/png')
+    res.cache_control.max_age = 300
+
+    return res
+
+
+
+================================================
+FILE: api/models.py
+================================================
+"""
+data models
+"""
+
+from datetime import datetime
+from enum import Enum
+from typing import Optional
+from pydantic import BaseModel
+
+
+# ---- storage ----
+
+class Tournament(BaseModel):
+    id: int
+    created: datetime
+    start: datetime
+    size: int
+    seed: Optional[int] = None
+
+
+class Result(Enum):
+    PENDING = 0
+    PLAYED = 1
+    DRAW = 2
+    FORFEIT = 3
+    PASS = 4
+    BYE = 5
+
+
+class Match(BaseModel):
+    id: str
+    created: datetime
+    updated: datetime
+    tournament: int
+    round: int
+    slot: int
+    user0: int
+    user1: int
+    winner: Optional[int] = None
+    loser: Optional[int] = None
+    result: Result
+
+
+class Gesture(Enum):
+    ROCK = 1
+    PAPER = 2
+    SCISSORS = 3
+
+
+class Move(BaseModel):
+    id: str
+    created: datetime
+    match: str
+    user: int
+    turn: int
+    move: Gesture
+    signature: str
+
+
+# ---- internal ----
+class MatchStatus(Enum):
+    NEW = 0
+    USER_0_PLAYED = 1
+    USER_1_PLAYED = 2
+    DRAW = 3
+    SETTLED = 4
+
+
+class MatchState(BaseModel):
+    match: str
+    turn: int
+    status: MatchStatus
+    winner: Optional[int] = None
+    loser: Optional[int] = None
+    history0: list[Gesture] = []
+    history1: list[Gesture] = []
+
+
+class TournamentState(BaseModel):
+    tournament: int
+    # TODO ...
+
+
+class MessageCode(Enum):
+    OK = 0
+    NOT_STARTED = 1
+    NOT_ENTERED = 2
+
+
+
+================================================
+FILE: api/render.py
+================================================
+"""
+dynamic image rendering for frames
+"""
+
+import datetime
+import requests
+import numpy as np
+import cv2
+from framelib.models import User
+
+from .models import Tournament, Match, MatchState, MatchStatus, Result
+from .rps import ROUND_BUFFER, parent_slots
+
+FONT = cv2.FONT_HERSHEY_SIMPLEX
+PFP_SZ = 96
+
+
+def render_home(tournament: int, total: int, round_: int, prize, remaining: int) -> bytes:
+    # setup background
+    im = cv2.imread('api/static/tournament.png')
+
+    # stats
+    x = 12
+    im = cv2.putText(im, 'Farcaster rock paper scissors', (x, 30), FONT, 0.7, (0, 0, 0), 2)
+    im = cv2.putText(im, f'tournament {tournament}', (x, 70), FONT, 0.7, (0, 0, 0), 1)
+    im = cv2.putText(im, f'prize {prize}', (x, 100), FONT, 0.7, (0, 0, 0), 1)
+    im = cv2.putText(im, f'round {round_}', (x, 130), FONT, 0.7, (0, 0, 0), 1)
+    im = cv2.putText(im, f'{total} users entered', (x, 160), FONT, 0.7, (0, 0, 0), 1)
+    im = cv2.putText(im, f'{remaining} competitors remain', (x, 190), FONT, 0.7, (0, 0, 0), 1)
+
+    # message
+    im = write_message(im, line0='Welcome to Farcaster rock paper scissors. Click below to play.', line1='Good luck!')
+
+    # encode
+    _, b = cv2.imencode('.png', im)
+    return b.tobytes()
+
+
+def render_message(line0: str = None, line1: str = None) -> bytes:
+    # setup background
+    im = cv2.imread('api/static/tournament.png')
+
+    # message
+    im = write_message(im, line0=line0, line1=line1)
+
+    # encode
+    _, b = cv2.imencode('.png', im)
+    return b.tobytes()
+
+
+def render_match(
+        match: Match,
+        user: User,
+        opponent: User,
+        round_: int,
+        state: MatchState,
+        remaining: int
+) -> bytes:
+    # setup background
+    im = cv2.imread('api/static/match.png')
+
+    # match data
+    im = cv2.putText(im, f'round {round_}', (510, 15), FONT, 0.3, (0, 0, 0))
+    im = cv2.putText(im, f'turn {state.turn}', (518, 25), FONT, 0.3, (0, 0, 0))
+    im = cv2.putText(im, f'{datetime.timedelta(seconds=max(0, remaining))}', (510, 35), FONT, 0.3, (0, 0, 0))
+
+    # player data
+    name_user = strip_text(f'{user.displayName:.16s}')
+    im = cv2.putText(im, name_user, (328, 158), FONT, 0.4, (0, 0, 0))
+    im = cv2.putText(im, f'Fid.{user.fid}', (460, 158), FONT, 0.3, (0, 0, 0))
+    try:
+        pfp_user = get_pfp(user.pfp.url)
+        x = 100
+        y = 120
+        im[y:y + PFP_SZ, x:x + PFP_SZ] = pfp_user
+    except Exception as e:
+        print(f'failed to render user pfp {user.fid} {e}')
+
+    # opponent data
+    if opponent is None:
+        name_opp = 'BYE'
+        im = cv2.putText(im, 'BYE', (45, 25), FONT, 0.4, (0, 0, 0))
+        im = cv2.putText(im, 'Fid.0', (175, 25), FONT, 0.3, (0, 0, 0))
+    else:
+        name_opp = strip_text(f'{opponent.displayName:.16s}')
+        im = cv2.putText(im, name_opp, (45, 25), FONT, 0.4, (0, 0, 0))
+        im = cv2.putText(im, f'Fid.{opponent.fid}', (175, 25), FONT, 0.3, (0, 0, 0))
+        try:
+            pfp_opp = get_pfp(opponent.pfp.url)
+            x = 360
+            y = 20
+            im[y:y + PFP_SZ, x:x + PFP_SZ] = pfp_opp
+        except Exception as e:
+            print(f'failed to render opponent pfp {user.fid} {e}')
+
+    # TODO bonus features: health bar, loser drop, gif, emoji render
+
+    # message
+    if match.result == Result.PENDING:
+        if state.status == MatchStatus.DRAW:
+            msg = f'Draw! You both played {state.history0[-1].name}.'
+            if remaining > ROUND_BUFFER:
+                msg += ' Make your next move.'
+        elif (user.fid == match.user0 and state.status == MatchStatus.USER_0_PLAYED) or (
+                user.fid == match.user1 and state.status == MatchStatus.USER_1_PLAYED):
+            msg = 'Waiting on your opponent.'
+        elif (user.fid == match.user0 and state.status == MatchStatus.USER_1_PLAYED) or (
+                user.fid == match.user1 and state.status == MatchStatus.USER_0_PLAYED):
+            msg = 'Your opponent has played. Make a move!'
+        else:
+            # NEW
+            msg = 'Play your move!'
+
+        im = write_message(
+            im,
+            line0=f'Round {round_} matchup, {name_user} vs. {name_opp}.',
+            line1=msg
+        )
+
+    elif match.result == Result.PLAYED:
+        # get last gesture
+        g_user = state.history0[-1]
+        g_opp = state.history1[-1]
+        if user.fid != match.user0:
+            g_user, g_opp = g_opp, g_user
+        # winning vs losing text
+        if match.winner == user.fid:
+            msg = f'You have defeated {name_opp} in round {round_}!'
+        else:
+            msg = f'You were knocked out by {name_opp} in round {round_}!'
+        im = write_message(im, line0=f'Opponent played {g_opp.name} against your {g_user.name}.', line1=msg)
+
+    elif match.result == Result.FORFEIT:
+        if match.winner == user.fid:
+            im = write_message(
+                im,
+                line0=f'Opponent did not play a move for turn {state.turn}.',
+                line1=f'You have defeated {name_opp} in round {round_} by forfeit.'
+            )
+        else:
+            im = write_message(
+                im,
+                line0=f'You did not play a move for turn {state.turn}.',
+                line1=f'You lost to {name_opp} in round {round_} by forfeit.'
+            )
+
+    elif match.result == Result.DRAW:
+        if match.winner == user.fid:
+            im = write_message(
+                im,
+                line0=f'Match was a draw after {state.turn} turns!',
+                line1=f'You have defeated {name_opp} in round {round_} by seniority.'
+            )
+        else:
+            im = write_message(
+                im,
+                line0=f'Match was a draw after {state.turn} turns!',
+                line1=f'You lost to {name_opp} in round {round_} by seniority.'
+            )
+
+    elif match.result == Result.PASS:
+        if match.winner == user.fid:
+            msg = f'You have defeated {name_opp} in round {round_} by seniority.'
+        else:
+            msg = f'You lost to {name_opp} in round {round_} by seniority.'
+        im = write_message(im, line0=f'No contest.', line1=msg)
+
+    elif match.result == Result.BYE:
+        im = write_message(
+            im,
+            line0=f'You received a bye for round {round_}.',
+            line1=f'Good luck in your next match.'
+        )
+
+    # cv2.imshow('debug', im)
+    # cv2.waitKey(0)
+    # return
+
+    # encode
+    _, b = cv2.imencode('.png', im)
+    return b.tobytes()
+
+
+# hardcode match visual bracket arrangement
+SLOT_PLACEMENTS = {
+    0: {
+        0: 0,
+        1: 7,
+        2: 3,
+        3: 4,
+        4: 1,
+        5: 6,
+        6: 2,
+        7: 5
+    },
+    1: {
+        0: 0,
+        1: 3,
+        2: 1,
+        3: 2
+    },
+    2: {
+        0: 0,
+        1: 1
+    },
+    3: {0: 0}
+}
+
+
+def render_bracket(bracket: dict, users: dict[int, User], round_: int) -> bytes:
+    # setup background
+    im = cv2.imread('api/static/tournament.png')
+
+    # draw bracket
+    y0 = 20
+    msg = None
+    msg_dt = datetime.datetime.fromtimestamp(0)
+    for i in range(5):
+        x = 20 + i * 100
+        dy = 12 * (2 ** i)
+        for j in range(int(16 / 2 ** i)):
+            y = y0 + j * dy
+            # draw bracket lines
+            gray = (175, 175, 175)
+            im = cv2.line(im, (x, y), (x + 100, y), gray, 1)
+            if j % 2 or i == 4:
+                continue
+            im = cv2.line(im, (x + 100, y), (x + 100, y + dy), gray, 1)
+
+            # draw matchup names
+            slot = j // 2
+            slot = SLOT_PLACEMENTS[i][slot]
+            if i not in bracket:
+                continue
+            if slot not in bracket[i]:
+                continue
+            m: Match = bracket[i][slot]
+            name_user0 = strip_text(f'{users[m.user0].displayName:.16s}')
+            im = cv2.putText(im, name_user0, (x + 2, y - 2), FONT, 0.3, (0, 0, 0))
+            name_user1 = strip_text(f'{users[m.user1].displayName:.16s}')
+            im = cv2.putText(im, name_user1, (x + 2, y + dy - 2), FONT, 0.3, (0, 0, 0))
+
+            # place winners
+            if (m.round == round_ or i == 3) and m.winner is not None:
+                name_user = strip_text(f'{users[m.winner].displayName:.16s}')
+                im = cv2.putText(im, name_user, (x + 102, int(y + 0.5 * dy - 2)), FONT, 0.3, (0, 0, 0))
+
+            # get update message
+            if m.round == round_ and (msg is None or m.updated > msg_dt):
+                if m.winner is not None:
+                    name_winner = strip_text(f'{users[m.winner].displayName:.16s}')
+                    name_loser = strip_text(f'{users[m.loser].displayName:.16s}')
+                    msg = f'{name_winner} has just defeated {name_loser}.'
+                else:
+                    msg = f'playing now! {name_user0} vs. {name_user1}'
+                msg_dt = m.updated
+
+        # offset y
+        y0 += int(0.5 * dy)
+
+    # write latest update message
+    if msg is not None:
+        tz = datetime.timezone(datetime.timedelta(hours=-5))
+        msg = f'[{msg_dt.astimezone(tz):%H:%M}] ' + msg
+        im = write_message(im, line0=msg)
+
+    # cv2.imshow('debug', im)
+    # cv2.waitKey(0)
+    # return
+
+    # encode
+    _, b = cv2.imencode('.png', im)
+    return b.tobytes()
+
+
+def strip_text(msg: str) -> str:
+    return ''.join(m for m in msg if ord(m) < 128).strip()
+
+
+def get_pfp(url: str) -> np.ndarray:
+    # if 'imgur' in url:
+    #     if 'jpg' in 'url':
+    #         url = url.replace('.jpg', 'b.jpg')
+    #     elif 'png' in 'url':
+    #         url = url.replace('.png', 'b.png')
+    # elif 'ipfs.decentralized-content' in url:
+    #     url = f'https://res.cloudinary.com/merkle-manufactory/image/fetch/c_fill,f_png,w_168/{url}'
+    url = f'https://res.cloudinary.com/merkle-manufactory/image/fetch/c_fill,f_jpg,h_{PFP_SZ},w_{PFP_SZ}/{url}'
+
+    res = requests.get(url, stream=True).raw
+    im = np.asarray(bytearray(res.read()), dtype='uint8')
+    im = cv2.imdecode(im, cv2.IMREAD_COLOR)
+    im = cv2.resize(im, (PFP_SZ, PFP_SZ))
+    return im
+
+
+def write_message(im: np.ndarray, line0: str = None, line1: str = None) -> np.ndarray:
+    if line0 is not None:
+        im = cv2.putText(im, line0, (22, 250), FONT, 0.5, (255, 255, 255))
+    if line1 is not None:
+        im = cv2.putText(im, line1, (22, 270), FONT, 0.5, (255, 255, 255))
+    return im
+
+
+
+================================================
+FILE: api/rps.py
+================================================
+"""
+game logic and state management on top of raw storage
+"""
+import math
+import datetime
+
+from supabase import Client
+
+from .models import Tournament, Match, Move, Gesture, MatchState, MatchStatus, Result, TournamentState
+from .storage import get_matches_count, get_match, get_moves, set_match, set_move, get_match_last, get_matches_after
+
+# constants
+ROUND_START = 18000  # midnight EST
+ROUND_DURATION = 86400
+ROUND_BUFFER = 3600
+
+
+def tournament_start(start: int) -> int:
+    # get next increment for actual tournament start time
+    days = math.ceil((start - ROUND_START) / ROUND_DURATION)
+    return ROUND_DURATION * days + ROUND_START
+
+
+def current_round(start: int, current: int) -> int:
+    t0 = tournament_start(start)
+    if current < t0:
+        return -1  # not started
+    return (current - t0) // ROUND_DURATION  # first round = 0
+
+
+def current_round_end(start: int, round_: int) -> int:
+    t0 = tournament_start(start)
+    return t0 + max(0, round_ + 1) * ROUND_DURATION
+
+
+def round_size(total: int, round_: int) -> int:
+    if total < 2:
+        raise ValueError('fewer than two people')
+    if round_ < 0:
+        raise ValueError(f'invalid round: {round_}')
+
+    # find next power of 2
+    total_rounds_ = total_rounds(total)
+
+    # split for each round passed
+    sz = 2 ** (total_rounds_ - round_)
+
+    if sz < 1:
+        return 1  # tournament over
+    return int(sz)
+
+
+def total_rounds(total: int) -> int:
+    return math.ceil(math.log2(total))
+
+
+def remaining_users(total: int, round_: int, settled: int) -> int:
+    round_remaining = round_size(total, round_) - settled
+    return min(round_remaining, total)
+
+
+def match_slot(total: int, round_: int, fid: int) -> int:
+    # note: fid index starts at 1
+    # need to match 1 vs N, 2 vs N-1, etc...
+    if fid > total:
+        raise ValueError(f'user too high: {fid}, total: {total}')
+    if fid < 1:
+        raise ValueError(f'fid too low: {fid}')
+    if round_ < 0:
+        raise ValueError(f'invalid round: {round_}')
+
+    sz = round_size(total, 0)
+    slot = fid - 1
+    for i in range(round_ + 1):
+        slot = slot if slot < sz / 2 else sz - slot - 1
+        sz /= 2
+
+    return int(slot)
+
+
+def parent_slots(total: int, round_: int, slot: int) -> (int, int):
+    if round_ < 1:
+        raise ValueError(f'invalid round: {round_}')
+    sz = round_size(total, round_)
+    if slot >= sz / 2:
+        raise ValueError(f'slot too high: {slot}, round size: {sz}')
+
+    mirror = sz - slot - 1
+    return slot, mirror
+
+
+def get_round_settled(supabase: Client, tournament: int, round_: int) -> int:
+    return get_matches_count(supabase, tournament, round_, result=Result.PLAYED)
+
+
+def get_match_user(
+        supabase: Client,
+        now: int,
+        tournament: int,
+        total: int,
+        round_: int,
+        fid: int
+) -> (Match, MatchState):
+    # tournament ongoing
+    sz = round_size(total, round_)
+    if sz < 2:
+        return None, None
+
+    # compute match slot and parent slots
+    slot = match_slot(total, round_, fid)
+
+    # get or lazily create match
+    m, s = get_match_slot(supabase, now, tournament, total, round_, round_, slot)
+    print(m, s)
+
+    # verify that user made it to match
+    if fid != m.user0 and fid != m.user1:
+        return None, None  # eliminated
+
+    # get state if not already returned
+    if s is None:
+        s = get_match_state(supabase, m)
+
+    return m, s
+
+
+def get_match_slot(
+        supabase: Client,
+        now: int,
+        tournament: int,
+        total: int,
+        curr_round: int,
+        round_: int,
+        slot: int,
+        create_if_none: bool = True
+) -> (Match, MatchState):
+    # get match if exists
+    m = get_match(supabase, tournament, round_, slot)
+    if m is not None:
+        print(f'got match {tournament} {round_} {slot}')
+        return update_match_result(supabase, now, curr_round, m)
+    else:
+        print(f'lazy init match {tournament} {round_} {slot}')
+        # lazy init
+        if round_ == 0:
+            # at beginning
+            sz = round_size(total, 0)
+            fid0 = slot + 1
+            fid1 = sz - slot
+            if fid1 > total:
+                fid1 = 0  # bye
+
+        else:
+            # get users by previous match results
+            a, b = parent_slots(total, round_, slot)
+
+            # recurse and (optional) backfill as needed
+            ma, _ = get_match_slot(supabase, now, tournament, total, curr_round, round_ - 1, a, create_if_none=True)
+            mb, _ = get_match_slot(supabase, now, tournament, total, curr_round, round_ - 1, b, create_if_none=True)
+            if ma.winner is None:
+                raise Exception(f'winner missing for match {ma.id}')  # sanity
+            if mb.winner is None:
+                raise Exception(f'winner missing for match {mb.id}')
+
+            fid0 = ma.winner
+            fid1 = mb.winner
+
+        m = Match(
+            id=f'{tournament}_{round_}_{slot}',
+            created=now,
+            updated=now,
+            tournament=tournament,
+            round=round_,
+            slot=slot,
+            user0=fid0,
+            user1=fid1,
+            result=Result.PENDING
+        )
+
+        # if match did not already exist, no moves could have been played
+        state = MatchState(match=m.id, turn=0, status=MatchStatus.NEW)
+        m = resolve_match(curr_round, m, state)
+
+        # note: would prefer not to recursively create old matches
+        # but currently doing backfill to incrementally handle timeout + set elimination match
+        if create_if_none:
+            set_match(supabase, m)
+
+        return m, state
+
+
+def update_match_result(supabase: Client, now: int, round_: int, match: Match) -> (Match, MatchState):
+    if match.winner is not None:
+        # already scored
+        return match, None
+
+    # winner: check for explicit result, then check for draw, then check for uncontested play, then prefer lower fid
+    state = get_match_state(supabase, match)
+    match = resolve_match(round_, match, state)
+
+    # assume any Match object passed in has at least been initialized to a PENDING state
+    if match.result == Result.PENDING:
+        return match, state  # nothing to update
+
+    # update
+    match.updated = datetime.datetime.utcfromtimestamp(now)
+    set_match(supabase, match)
+
+    return match, state
+
+
+def resolve_match(round_: int, match: Match, state: MatchState) -> Match:
+    if match.user1 == 0:
+        # settle bye
+        match.winner = match.user0
+        match.loser = 0
+        match.result = Result.BYE
+
+    elif state.status in {MatchStatus.NEW, MatchStatus.DRAW}:
+        if round_ == match.round:
+            match.result = Result.PENDING
+        else:
+            # draw goes to farcaster seniority (lower fid)
+            match.winner = min(match.user0, match.user1)
+            match.loser = max(match.user0, match.user1)
+            match.result = Result.PASS if state.status == MatchStatus.NEW else Result.DRAW
+
+    elif state.status == MatchStatus.USER_0_PLAYED:
+        if round_ == match.round:
+            match.result = Result.PENDING
+        else:
+            # forfeit goes to whoever played last move
+            match.winner = match.user0
+            match.loser = match.user1
+            match.result = Result.FORFEIT
+
+    elif state.status == MatchStatus.USER_1_PLAYED:
+        if round_ == match.round:
+            match.result = Result.PENDING
+        else:
+            match.winner = match.user1
+            match.loser = match.user0
+            match.result = Result.FORFEIT
+
+    elif state.status == MatchStatus.SETTLED:
+        users = {match.user0, match.user1}  # sanity
+        if state.winner not in users:
+            raise Exception(f'invalid winner {state.winner} for match {match.id}')
+        if state.loser not in users:
+            raise Exception(f'invalid loser {state.loser} for match {match.id}')
+        match.winner = state.winner
+        match.loser = state.loser
+        match.result = Result.PLAYED
+
+    return match
+
+
+def get_match_state(supabase: Client, match: Match) -> MatchState:
+    moves = get_moves(supabase, match.id)
+    state = resolve_match_state(match, moves)
+    return state
+
+
+def resolve_match_state(match: Match, moves: list[Move]) -> MatchState:
+    state = MatchState(match=match.id, turn=0, status=MatchStatus.NEW)
+
+    if len(moves) == 0:
+        return state
+
+    moves0 = sorted([m for m in moves if m.user == match.user0], key=lambda m: m.turn)
+    moves1 = sorted([m for m in moves if m.user == match.user1], key=lambda m: m.turn)
+    if abs(len(moves0) - len(moves1)) > 1:
+        raise Exception(f'mismatched number of moves {match.id}')  # sanity
+
+    for i, (m0, m1) in enumerate(zip(moves0, moves1)):
+        print(i, m0, m1)
+        if m0.turn != i or m0.turn != m1.turn:
+            raise Exception(f'invalid move alignment {match.id} {i} {m0.turn} {m1.turn}')  # sanity
+
+        state.history0.append(m0.move)
+        state.history1.append(m1.move)
+
+        if m0.move == m1.move:
+            state.status = MatchStatus.DRAW
+        else:
+            # determine winner
+            if (
+                    (m0.move == Gesture.ROCK and m1.move == Gesture.SCISSORS) or
+                    (m0.move == Gesture.PAPER and m1.move == Gesture.ROCK) or
+                    (m0.move == Gesture.SCISSORS and m1.move == Gesture.PAPER)
+            ):
+                state.winner = match.user0
+                state.loser = match.user1
+            else:
+                state.winner = match.user1
+                state.loser = match.user0
+            state.status = MatchStatus.SETTLED
+            state.turn = i
+            break
+
+    # settled
+    if state.status == MatchStatus.SETTLED:
+        # sanity
+        if state.turn != len(moves0) - 1:
+            raise Exception(f'unnecessary moves found {match.id} {state.turn} {len(moves0)}')
+        if len(moves0) != len(moves1):
+            raise Exception(f'mismatched number of moves {match.id} {len(moves0)} {len(moves1)}')
+        return state
+
+    # ongoing match status
+    if len(moves0) == len(moves1):
+        state.status = MatchStatus.DRAW
+        state.turn = len(moves0)
+    elif len(moves0) > len(moves1):
+        state.status = MatchStatus.USER_0_PLAYED
+        state.turn = len(moves1)
+    else:
+        state.status = MatchStatus.USER_1_PLAYED
+        state.turn = len(moves0)
+
+    return state
+
+
+def submit_move(supabase: Client, now: int, match: str, fid: int, turn: int, gesture: Gesture, signature: str):
+    move = Move(
+        id=f'{match}_{fid}_{turn}',
+        created=now,
+        match=match,
+        user=fid,
+        turn=turn,
+        move=gesture,
+        signature=signature
+    )
+    return set_move(supabase, move)
+
+
+def get_match_user_last(supabase: Client, tournament: int, fid: int) -> Match:
+    # convenience just to show user elimination (or last match) details
+    m = get_match_last(supabase, tournament, fid)
+    if m is None:
+        raise Exception(f'no last match found for {tournament} {fid}')
+    return m
+
+
+def get_winner(supabase: Client, tournament: int) -> int:
+    # TODO
+    pass
+
+
+def get_final_bracket(supabase: Client, tournament: int, total: int):
+    # start bracket with round of 16
+    total_rounds_ = total_rounds(total)
+    if total_rounds_ < 4:
+        raise ValueError('not enough competitors for a round of 16')
+    round_16 = total_rounds_ - 4
+
+    # get all matches in last 4 rounds
+    matches = get_matches_after(supabase, tournament, round_16)
+    bracket = {}
+    for m in matches:
+        r = m.round - round_16
+        if r not in bracket:
+            bracket[r] = {}
+        bracket[r][m.slot] = m
+
+    return bracket
+
+
+def get_tournament_state(supabase: Client, tournament: int, round_: int) -> TournamentState:
+    # TODO
+    pass
+
+
+
+================================================
+FILE: api/storage.py
+================================================
+"""
+methods to read from and write to postgres database
+"""
+
+# lib
+import os
+
+from dotenv import load_dotenv
+from supabase import create_client, Client
+from postgrest.types import CountMethod
+
+# src
+from .models import Tournament, Match, Result, Move, Gesture
+
+
+def get_supabase() -> Client:
+    if os.getenv('VERCEL_ENV') is None:
+        load_dotenv()
+    url = os.environ.get('SUPABASE_URL')
+    key = os.environ.get('SUPABASE_KEY')
+    supabase = create_client(url, key)
+    return supabase
+
+
+def get_current_tournament(supabase: Client) -> Tournament:
+    res = supabase.table('tournament').select('*').order('id', desc=True).limit(1).execute()
+    if not res.data:
+        raise Exception('could not get current tournament')
+    return Tournament(**res.data[0])
+
+
+def get_tournament(supabase: Client, tournament: int) -> Tournament:
+    res = supabase.table('tournament').select('*').eq('id', tournament).execute()
+    if not res.data:
+        raise Exception('could not get current tournament')
+    return Tournament(**res.data[0])
+
+
+def get_matches_count(supabase: Client, tournament: int, round_: int, result: Result = None) -> int:
+    # TODO ideally would not return any data
+    q = supabase.table('match').select('id', count=CountMethod.exact).eq('tournament', tournament).eq('round', round_)
+    if result is not None:
+        q = q.eq('result', result.value)
+    res = q.execute()
+    return res.count
+
+
+def get_matches_after(supabase: Client, tournament: int, round_: int) -> list[Match]:
+    q = supabase.table('match').select('*').eq('tournament', tournament).gte('round', round_)
+    res = q.execute()
+    if not res.data:
+        return []
+    return [Match(**d) for d in res.data]
+
+
+def get_match(supabase: Client, tournament: int, round_: int, slot: int) -> Match:
+    match_id = f'{tournament}_{round_}_{slot}'
+    res = supabase.table('match').select('*').eq('id', match_id).execute()
+    if not res.data:
+        return None
+    return Match(**res.data[0])
+
+
+def get_match_loser(supabase: Client, tournament: int, loser: int) -> Match:
+    res = supabase.table('match').select('*').eq('tournament', tournament).eq('loser', loser).execute()
+    if not res.data:
+        return None
+    if len(res.data) > 1:
+        raise Exception(f'multiple elimination matches {res.data}')
+    return Match(**res.data[0])
+
+
+def get_match_last(supabase: Client, tournament: int, fid: int) -> Match:
+    res = supabase.table('match').select('*').eq('tournament', tournament).or_(f'user0.eq.{fid},user1.eq.{fid}').order(
+        'round', desc=True).limit(1).execute()
+    if not res.data:
+        return None
+    return Match(**res.data[0])
+
+
+def set_match(supabase: Client, match: Match):
+    match_id = f'{match.tournament}_{match.round}_{match.slot}'
+    if match.id != match_id:
+        print(f'warning: match id was wrong {match.id} {match_id}, fixing...')
+        match.id = match_id
+    body = match.model_dump(mode='json', exclude_none=True)
+    print(f'set match {body}')
+    res = supabase.table('match').upsert(body).execute()
+    return res
+
+
+def get_moves(supabase: Client, match_id: str) -> list[Move]:
+    res = supabase.table('move').select('*').eq('match', match_id).execute()
+    if not res.data:
+        return []
+    return [Move(**d) for d in res.data]
+
+
+def set_move(supabase: Client, move: Move):
+    move_id = f'{move.match}_{move.user}_{move.turn}'
+    if move.id != move_id:
+        print(f'warning: move id was wrong {move.id} {move_id}, fixing...')
+        move.id = move_id
+
+    body = move.model_dump(mode='json')
+    print(f'set move {body}')
+    res = supabase.table('move').insert(body).execute()
+    return res
+
+
+
+
+================================================
+FILE: supabase/seed.sql
+================================================
+
+
+
+================================================
+FILE: supabase/.gitignore
+================================================
+# supabase
+.branches
+.temp
+.env
+
+
+
+================================================
+FILE: supabase/migrations/00000000000001_create_table_tournament.sql
+================================================
+-- tournament table
+CREATE TABLE IF NOT EXISTS "public"."tournament" (
+    "id" integer NOT NULL UNIQUE PRIMARY KEY,
+    "created" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "start" timestamp with time zone NOT NULL,
+    "size" bigint NOT NULL,
+    "seed" bigint
+);
+
+ALTER TABLE "public"."tournament" ALTER COLUMN "id" ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME "public"."tournament_id_seq"
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+ALTER TABLE "public"."tournament" ENABLE ROW LEVEL SECURITY;
+
+
+
+================================================
+FILE: supabase/migrations/00000000000002_create_table_match.sql
+================================================
+-- match table
+CREATE TABLE IF NOT EXISTS "public"."match" (
+    "id" character varying NOT NULL UNIQUE PRIMARY KEY,
+    "created" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "updated" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "tournament" integer NOT NULL REFERENCES "public"."tournament",
+    "round" integer NOT NULL,
+    "slot" bigint NOT NULL,
+    "user0" bigint NOT NULL,
+    "user1" bigint NOT NULL,
+    "winner" bigint,
+    "loser" bigint,
+    "result" smallint
+);
+
+ALTER TABLE "public"."match" ENABLE ROW LEVEL SECURITY;
+
+
+
+================================================
+FILE: supabase/migrations/00000000000003_create_table_move.sql
+================================================
+-- move table
+CREATE TABLE IF NOT EXISTS "public"."move" (
+    "id" character varying NOT NULL UNIQUE PRIMARY KEY,
+    "created" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "match" character varying NOT NULL REFERENCES "public"."match",
+    "user" bigint NOT NULL,
+    "turn" integer NOT NULL,
+    "move" smallint NOT NULL,
+    "signature" character varying NOT NULL
+);
+
+ALTER TABLE "public"."move" ENABLE ROW LEVEL SECURITY;
+
+
+
+================================================
+FILE: test/__init__.py
+================================================
+
+
+
+================================================
+FILE: test/test_match.py
+================================================
+"""
+test cases for match gameplay logic utilities
+"""
+
+# lib
+import time
+import pytest
+
+# src
+from api.rps import resolve_match, resolve_match_state
+from api.models import Match, MatchStatus, MatchState, Move, Gesture, Result
+
+
+class TestResolveResult(object):
+    def test_settled_live(self):
+        t = int(time.time())
+        match = Match(
+            id='abcd',
+            created=t,
+            updated=t,
+            tournament=1,
+            round=3,
+            slot=55,
+            user0=7,
+            user1=8,
+            result=Result.PENDING
+        )
+        state = MatchState(match=match.id, turn=2, status=MatchStatus.SETTLED, winner=match.user0, loser=match.user1)
+
+        m = resolve_match(match.round, match, state)
+
+        assert m.result == Result.PLAYED
+        assert m.winner == 7
+        assert m.loser == 8
+
+    def test_bye(self):
+        t = int(time.time())
+        match = Match(
+            id='abcd',
+            created=t,
+            updated=t,
+            tournament=1,
+            round=0,
+            slot=1,
+            user0=15,
+            user1=0,
+            result=Result.PENDING
+        )
+        state = MatchState(match=match.id, turn=0, status=MatchStatus.NEW)
+
+        m = resolve_match(match.round, match, state)
+
+        assert m.result == Result.BYE
+        assert m.winner == 15
+        assert m.loser == 0
+
+    def test_pending(self):
+        t = int(time.time())
+        match = Match(
+            id='abcd',
+            created=t,
+            updated=t,
+            tournament=1,
+            round=2,
+            slot=1,
+            user0=7,
+            user1=8,
+            result=Result.PENDING
+        )
+        state = MatchState(match=match.id, turn=0, status=MatchStatus.NEW)
+
+        m = resolve_match(match.round, match, state)
+
+        assert m.result == Result.PENDING
+        assert m.winner is None
+        assert m.loser is None
+
+    def test_pass(self):
+        t = int(time.time())
+        match = Match(
+            id='abcd',
+            created=t,
+            updated=t,
+            tournament=1,
+            round=2,
+            slot=1,
+            user0=7,
+            user1=8,
+            result=Result.PENDING
+        )
+        state = MatchState(match=match.id, turn=0, status=MatchStatus.NEW)
+
+        m = resolve_match(3, match, state)  # round has ended
+
+        assert m.result == Result.PASS
+        assert m.winner == 7
+        assert m.loser == 8
+
+    def test_draw(self):
+        t = int(time.time())
+        match = Match(
+            id='abcd',
+            created=t,
+            updated=t,
+            tournament=1,
+            round=2,
+            slot=1,
+            user0=7,
+            user1=8,
+            result=Result.PENDING
+        )
+        state = MatchState(match=match.id, turn=5, status=MatchStatus.DRAW)  # multiple moves played
+
+        m = resolve_match(3, match, state)  # round has ended
+
+        assert m.result == Result.DRAW
+        assert m.winner == 7
+        assert m.loser == 8
+
+    def test_waiting(self):
+        t = int(time.time())
+        match = Match(
+            id='abcd',
+            created=t,
+            updated=t,
+            tournament=1,
+            round=2,
+            slot=1,
+            user0=7,
+            user1=8,
+            result=Result.PENDING
+        )
+        state = MatchState(match=match.id, turn=5, status=MatchStatus.USER_1_PLAYED)  # waiting
+
+        m = resolve_match(match.round, match, state)  # round still going
+
+        assert m.result == Result.PENDING
+        assert m.winner is None
+        assert m.loser is None
+
+    def test_forfeit_0(self):
+        t = int(time.time())
+        match = Match(
+            id='abcd',
+            created=t,
+            updated=t,
+            tournament=1,
+            round=2,
+            slot=1,
+            user0=7,
+            user1=8,
+            result=Result.PENDING
+        )
+        state = MatchState(match=match.id, turn=5, status=MatchStatus.USER_0_PLAYED)
+
+        m = resolve_match(3, match, state)  # round has ended
+
+        assert m.result == Result.FORFEIT
+        assert m.winner == 7
+        assert m.loser == 8
+
+    def test_forfeit_1(self):
+        t = int(time.time())
+        match = Match(
+            id='abcd',
+            created=t,
+            updated=t,
+            tournament=1,
+            round=2,
+            slot=1,
+            user0=7,
+            user1=8,
+            result=Result.PENDING
+        )
+        state = MatchState(match=match.id, turn=5, status=MatchStatus.USER_1_PLAYED)
+
+        m = resolve_match(3, match, state)  # round has ended
+
+        assert m.result == Result.FORFEIT
+        assert m.winner == 8  # higher fid, but last to play
+        assert m.loser == 7
+
+    def test_invalid_state(self):
+        t = int(time.time())
+        match = Match(
+            id='abcd',
+            created=t,
+            updated=t,
+            tournament=1,
+            round=2,
+            slot=1,
+            user0=7,
+            user1=8,
+            result=Result.PENDING
+        )
+        state = MatchState(match=match.id, turn=5, status=MatchStatus.SETTLED, winner=16, loser=8)
+
+        with pytest.raises(Exception):
+            resolve_match(3, match, state)  # invalid winner
+
+
+class TestResolveState(object):
+    def test_new(self):
+        t = int(time.time())
+        match = Match(
+            id='abcd',
+            created=t,
+            updated=t,
+            tournament=1,
+            round=2,
+            slot=1,
+            user0=7,
+            user1=8,
+            result=Result.PENDING
+        )
+        moves = []
+        s = resolve_match_state(match, moves)
+
+        assert s.match == match.id
+        assert s.turn == 0
+        assert s.status == MatchStatus.NEW
+        assert s.winner is None
+        assert s.loser is None
+        assert len(s.history0) == 0
+        assert len(s.history1) == 0
+
+    def test_draw(self):
+        t = int(time.time())
+        match = Match(
+            id='abcd',
+            created=t,
+            updated=t,
+            tournament=1,
+            round=2,
+            slot=1,
+            user0=7,
+            user1=8,
+            result=Result.PENDING
+        )
+        moves = [
+            Move(id='m0', created=t, match='abcd', turn=0, user=7, move=Gesture.ROCK, signature='0x'),
+            Move(id='m1', created=t, match='abcd', turn=0, user=8, move=Gesture.ROCK, signature='0x'),
+            Move(id='m2', created=t, match='abcd', turn=1, user=8, move=Gesture.PAPER, signature='0x'),
+            Move(id='m3', created=t, match='abcd', turn=1, user=7, move=Gesture.PAPER, signature='0x')
+        ]
+        s = resolve_match_state(match, moves)
+
+        assert s.match == match.id
+        assert s.turn == 2
+        assert s.status == MatchStatus.DRAW
+        assert s.winner is None
+        assert s.loser is None
+        assert len(s.history0) == 2
+        assert len(s.history1) == 2
+        assert s.history0[0] == Gesture.ROCK
+        assert s.history1[0] == Gesture.ROCK
+        assert s.history0[1] == Gesture.PAPER
+        assert s.history1[1] == Gesture.PAPER
+
+    def test_waiting_0(self):
+        t = int(time.time())
+        match = Match(
+            id='abcd',
+            created=t,
+            updated=t,
+            tournament=1,
+            round=2,
+            slot=1,
+            user0=7,
+            user1=8,
+            result=Result.PENDING
+        )
+        moves = [
+            Move(id='m0', created=t, match='abcd', turn=0, user=7, move=Gesture.ROCK, signature='0x'),
+            Move(id='m1', created=t, match='abcd', turn=0, user=8, move=Gesture.ROCK, signature='0x'),
+            Move(id='m2', created=t, match='abcd', turn=1, user=7, move=Gesture.PAPER, signature='0x'),
+        ]
+        s = resolve_match_state(match, moves)
+
+        assert s.match == match.id
+        assert s.turn == 1
+        assert s.status == MatchStatus.USER_0_PLAYED
+        assert s.winner is None
+        assert s.loser is None
+        assert len(s.history0) == 1
+        assert len(s.history1) == 1
+        assert s.history0[0] == Gesture.ROCK
+        assert s.history1[0] == Gesture.ROCK
+
+    def test_waiting_1(self):
+        t = int(time.time())
+        match = Match(
+            id='abcd',
+            created=t,
+            updated=t,
+            tournament=1,
+            round=2,
+            slot=1,
+            user0=7,
+            user1=8,
+            result=Result.PENDING
+        )
+        moves = [
+            Move(id='m0', created=t, match='abcd', turn=0, user=7, move=Gesture.ROCK, signature='0x'),
+            Move(id='m1', created=t, match='abcd', turn=0, user=8, move=Gesture.ROCK, signature='0x'),
+            Move(id='m2', created=t, match='abcd', turn=1, user=8, move=Gesture.PAPER, signature='0x'),
+            Move(id='m3', created=t, match='abcd', turn=1, user=7, move=Gesture.PAPER, signature='0x'),
+            Move(id='m4', created=t, match='abcd', turn=2, user=8, move=Gesture.PAPER, signature='0x')
+        ]
+        s = resolve_match_state(match, moves)
+
+        assert s.match == match.id
+        assert s.turn == 2
+        assert s.status == MatchStatus.USER_1_PLAYED
+        assert s.winner is None
+        assert s.loser is None
+        assert len(s.history0) == 2
+        assert len(s.history1) == 2
+
+    def test_settled(self):
+        t = int(time.time())
+        match = Match(
+            id='abcd',
+            created=t,
+            updated=t,
+            tournament=1,
+            round=2,
+            slot=1,
+            user0=7,
+            user1=8,
+            result=Result.PENDING
+        )
+        moves = [
+            Move(id='m0', created=t, match='abcd', turn=0, user=7, move=Gesture.ROCK, signature='0x'),
+            Move(id='m1', created=t, match='abcd', turn=0, user=8, move=Gesture.ROCK, signature='0x'),
+            Move(id='m2', created=t, match='abcd', turn=1, user=8, move=Gesture.SCISSORS, signature='0x'),
+            Move(id='m3', created=t, match='abcd', turn=1, user=7, move=Gesture.PAPER, signature='0x')
+        ]
+        s = resolve_match_state(match, moves)
+
+        assert s.match == match.id
+        assert s.turn == 1
+        assert s.status == MatchStatus.SETTLED
+        assert s.winner == 8
+        assert s.loser == 7
+        assert len(s.history0) == 2
+        assert len(s.history1) == 2
+        assert s.history0[0] == Gesture.ROCK
+        assert s.history1[0] == Gesture.ROCK
+        assert s.history0[1] == Gesture.PAPER
+        assert s.history1[1] == Gesture.SCISSORS
+
+    def test_invalid_turns(self):
+        t = int(time.time())
+        match = Match(
+            id='abcd',
+            created=t,
+            updated=t,
+            tournament=1,
+            round=2,
+            slot=1,
+            user0=7,
+            user1=8,
+            result=Result.PENDING
+        )
+        moves = [
+            Move(id='m0', created=t, match='abcd', turn=0, user=7, move=Gesture.ROCK, signature='0x'),
+            Move(id='m1', created=t, match='abcd', turn=1, user=8, move=Gesture.ROCK, signature='0x'),
+            Move(id='m2', created=t, match='abcd', turn=1, user=8, move=Gesture.SCISSORS, signature='0x'),
+            Move(id='m3', created=t, match='abcd', turn=2, user=7, move=Gesture.PAPER, signature='0x')
+        ]
+        # misaligned turn indices
+        with pytest.raises(Exception):
+            resolve_match_state(match, moves)
+
+    def test_invalid_counts(self):
+        t = int(time.time())
+        match = Match(
+            id='abcd',
+            created=t,
+            updated=t,
+            tournament=1,
+            round=2,
+            slot=1,
+            user0=7,
+            user1=8,
+            result=Result.PENDING
+        )
+        moves = [
+            Move(id='m0', created=t, match='abcd', turn=0, user=7, move=Gesture.ROCK, signature='0x'),
+            Move(id='m1', created=t, match='abcd', turn=0, user=8, move=Gesture.ROCK, signature='0x'),
+            Move(id='m2', created=t, match='abcd', turn=1, user=7, move=Gesture.SCISSORS, signature='0x'),
+            Move(id='m3', created=t, match='abcd', turn=1, user=7, move=Gesture.PAPER, signature='0x')
+        ]
+        # too many user0 moves
+        with pytest.raises(Exception):
+            resolve_match_state(match, moves)
+
+
+
+================================================
+FILE: test/test_tournament.py
+================================================
+"""
+test cases for tournament logic utilities
+"""
+
+# lib
+import pytest
+
+# src
+from api.rps import current_round, round_size, match_slot, parent_slots, current_round_end
+
+
+class TestCurrentRound(object):
+    def test_first(self):
+        start = 1707541200  # 2024/02/10 00:00 eastern
+        curr = 1707564600  # 630a
+
+        r = current_round(start, curr)
+
+        assert r == 0
+
+    def test_many(self):
+        start = 1707541200  # 2024/02/10 00:00 eastern
+        curr = 1708534800  # 2023/02/21 noon
+
+        r = current_round(start, curr)
+
+        assert r == 11
+
+    def test_before(self):
+        start = 1707541200  # 2024/02/10 00:00 eastern
+        curr = 1707539400  # 1130p night before
+
+        r = current_round(start, curr)
+
+        assert r == -1
+
+    def test_offset_first(self):
+        start = 1707519600  # 2024/02/09 18:00 eastern
+        curr = 1707564600  # 630a
+
+        r = current_round(start, curr)
+
+        assert r == 0
+
+    def test_offset_first_later(self):
+        start = 1707519600  # 2024/02/09 18:00 eastern
+        curr = 1707613200  # 20:00p
+
+        r = current_round(start, curr)
+
+        assert r == 0
+
+    def test_offset_before(self):
+        start = 1707519600  # 2024/02/09 18:00 eastern
+        curr = 1707539400  # 1130p night before
+
+        r = current_round(start, curr)
+
+        assert start < curr  # note curr is technically after start, but we round to the increment
+        assert r == -1
+
+
+class TestCurrentRoundEnd(object):
+    def test_first(self):
+        start = 1707541200  # 2024/02/10 00:00 eastern
+        # 630a, round 0
+
+        end = current_round_end(start, 0)
+
+        assert end == start + 86400
+
+    def test_many(self):
+        start = 1707541200  # 2024/02/10 00:00 eastern
+        # 2023/02/21 noon, round 11
+
+        end = current_round_end(start, 11)
+
+        assert end == start + 12 * 86400
+
+    def test_before(self):
+        start = 1707541200  # 2024/02/10 00:00 eastern
+        # 1130p night before
+
+        r = current_round_end(start, -1)
+
+        assert r == start
+
+    def test_offset_first(self):
+        start = 1707519600  # 2024/02/09 18:00 eastern
+        # 630a, round 0
+
+        end = current_round_end(start, 0)
+
+        assert end == 1707541200 + 86400
+
+
+class TestRoundSize(object):
+    def test_first_simple(self):
+        sz = round_size(64, 0)
+        assert sz == 64
+
+    def test_second_simple(self):
+        sz = round_size(64, 1)
+        assert sz == 32
+
+    def test_final4_simple(self):
+        sz = round_size(64, 4)
+        assert sz == 4
+
+    def test_over_simple(self):
+        sz = round_size(64, 10)
+        assert sz == 1
+
+    def test_first_uneven(self):
+        sz = round_size(80, 0)
+        assert sz == 128
+
+    def test_second_uneven(self):
+        sz = round_size(80, 1)
+        assert sz == 64
+
+    def test_finals_uneven(self):
+        sz = round_size(80, 6)
+        assert sz == 2
+
+    def test_over_uneven(self):
+        sz = round_size(80, 10)
+        assert sz == 1
+
+
+class TestMatchSlot(object):
+    def test_0_1(self):
+        slot = match_slot(64, 0, 1)
+        assert slot == 0
+
+    def test_0_2(self):
+        slot = match_slot(64, 0, 2)
+        assert slot == 1
+
+    def test_0_9(self):
+        slot = match_slot(64, 0, 9)
+        assert slot == 8
+
+    def test_0_32(self):
+        slot = match_slot(64, 0, 32)
+        assert slot == 31
+
+    def test_0_33(self):
+        slot = match_slot(64, 0, 33)
+        assert slot == 31
+
+    def test_0_56(self):
+        slot = match_slot(64, 0, 56)
+        assert slot == 8
+
+    def test_0_63(self):
+        slot = match_slot(64, 0, 63)
+        assert slot == 1
+
+    def test_0_64(self):
+        slot = match_slot(64, 0, 64)
+        assert slot == 0
+
+    def test_1_1(self):
+        slot = match_slot(64, 1, 1)
+        assert slot == 0
+
+    def test_1_2(self):
+        slot = match_slot(64, 1, 2)
+        assert slot == 1
+
+    def test_1_9(self):
+        slot = match_slot(64, 1, 9)
+        assert slot == 8
+
+    def test_1_32(self):
+        slot = match_slot(64, 1, 32)
+        assert slot == 0  # match up against 1v64 winner
+
+    def test_1_33(self):
+        slot = match_slot(64, 1, 33)
+        assert slot == 0
+
+    def test_1_56(self):
+        slot = match_slot(64, 1, 56)
+        assert slot == 8
+
+    def test_1_63(self):
+        slot = match_slot(64, 1, 63)
+        assert slot == 1
+
+    def test_1_64(self):
+        slot = match_slot(64, 1, 64)
+        assert slot == 0
+
+    def test_elite8_1(self):
+        slot = match_slot(64, 3, 1)
+        assert slot == 0
+
+    def test_elite8_5(self):
+        slot = match_slot(64, 3, 5)
+        assert slot == 3  # 4 vs 5
+
+    def test_elite8_63(self):
+        slot = match_slot(64, 3, 63)
+        assert slot == 1  # upset 2
+
+    def test_final_23(self):
+        slot = match_slot(64, 5, 23)
+        assert slot == 0
+
+    def test_final_42(self):
+        slot = match_slot(64, 5, 42)
+        assert slot == 0
+
+    def test_elite8_1_uneven(self):
+        slot = match_slot(50, 3, 1)
+        assert slot == 0
+
+    def test_elite8_5_uneven(self):
+        slot = match_slot(50, 3, 5)
+        assert slot == 3
+
+    def test_elite8_30_uneven(self):
+        slot = match_slot(50, 3, 30)
+        assert slot == 2
+
+    def test_uneven_invalid(self):
+        with pytest.raises(ValueError):
+            match_slot(50, 3, 51)
+
+
+class TestParentSlots(object):
+
+    def test_1_0(self):
+        a, b = parent_slots(64, 1, 0)
+        assert a == 0
+        assert b == 31
+
+    def test_1_2(self):
+        a, b = parent_slots(64, 1, 2)
+        assert a == 2
+        assert b == 29
+
+    def test_1_8(self):
+        a, b = parent_slots(64, 1, 8)
+        assert a == 8
+        assert b == 23  # from 24 v 41
+
+    def test_final(self):
+        a, b = parent_slots(64, 5, 0)
+        assert a == 0
+        assert b == 1
+
+    def test_final_uneven(self):
+        a, b = parent_slots(48, 5, 0)
+        assert a == 0
+        assert b == 1
+
+    def test_final_invalid(self):
+        with pytest.raises(ValueError):
+            parent_slots(64, 5, 1)
+
+
