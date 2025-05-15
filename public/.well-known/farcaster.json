@@ -1,0 +1,18 @@
+{
+  "accountAssociation": {
+    "header": "eyJmaWQiOjMzNzg4OCwidHlwZSI6ImN1c3RvZHkiLCJrZXkiOiIweDQxNTQ1NzBkNzJGRjAyNEYwMkM1MjBmNzgzY0U4QkNBN0FDODMwNkYifQ",
+    "payload": "eyJkb21haW4iOiJlbGVtbnQtdG91cm5hbWVudC1hbHBoYS0xZnpyZDVpM3UtazBiYXMtcHJvamVjdHMudmVyY2VsLmFwcCJ9",
+    "signature": "MHgyNDQzNzU3ZjUzZTUwNmIwNTY2YTRjNWUwODJkYzkzYmYzNzc0MDc3NjRmNzY4NDM2NjU1N2Y4ZDNhMDhhMjFhNGNjYWRlNmVmZTZiM2I2OGZiYzI4MDE4YmQ1ODFkNTQ2ZDRjZjc2Zjk1MWRkNzAyNGE3YTU2ODMxYjU3MWYzNDFi"
+  },
+  "frame": {
+    "version": "1",
+    "name": "Example Frame",
+    "iconUrl": "https://elemnt-tournament-alpha-1fzrd5i3u-k0bas-projects.vercel.app/icon.png",
+    "homeUrl": "https://elemnt-tournament-alpha-1fzrd5i3u-k0bas-projects.vercel.app",
+    "imageUrl": "https://elemnt-tournament-alpha-1fzrd5i3u-k0bas-projects.vercel.app/image.png",
+    "buttonTitle": "Check this out",
+    "splashImageUrl": "https://elemnt-tournament-alpha-1fzrd5i3u-k0bas-projects.vercel.app/splash.png",
+    "splashBackgroundColor": "#eeccff",
+    "webhookUrl": "https://elemnt-tournament-alpha-1fzrd5i3u-k0bas-projects.vercel.app/api/webhook"
+  }
+}
