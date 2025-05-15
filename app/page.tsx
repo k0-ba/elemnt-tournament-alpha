@@ -33,7 +33,8 @@ type BattleLogEntry = {
 };
 
 export default function App() {
-  const { setFrameReady, isFrameReady } = useMiniKit();
+  const miniKitData = useMiniKit(); // Get the whole object
+  const { isFrameReady, setFrameReady } = miniKitData; // Destructure what we know we use
   const [userHealth, setUserHealth] = useState(5);
   const [aiHealth, setAiHealth] = useState(5);
   const [userChoice, setUserChoice] = useState<string | null>(null);
@@ -51,40 +52,39 @@ export default function App() {
 
 
   useEffect(() => {
-    if (!isFrameReady) {
+    console.log("Full useMiniKit() return data:", miniKitData); // Log the whole object
+
+    if (isFrameReady === false && setFrameReady) { // Check if isFrameReady is explicitly false
       setFrameReady();
     }
 
     let avatarSet = false;
-    if (typeof window !== 'undefined') {
-      console.log("Attempting to find Farcaster context...");
-      console.log("window.farcaster:", (window as any).farcaster);
-      console.log("window.frames:", (window as any).frames);
-      console.log("window.miniKit (if @coinbase/onchainkit/minikit exposes it globally):", (window as any).miniKit);
+    if (typeof window !== 'undefined') { // Keep client-side check for localStorage mainly
+      console.log("Attempting to find Farcaster context via useMiniKit()...");
+      
+      // Speculative access based on potential structure of miniKitData
+      // We need to inspect the log of `miniKitData` to confirm the actual path.
+      // Common Farcaster user object structures might include 'user', 'farcasterUser', 'profile', 'viewerContext'
+      const farcasterUser = (miniKitData as any)?.user || 
+                            (miniKitData as any)?.farcasterUser || 
+                            (miniKitData as any)?.profile || 
+                            (miniKitData as any)?.viewerContext || 
+                            (miniKitData as any)?.frameInfo?.user; // Another common pattern in frame contexts
 
-      const farcasterWindow = window as any;
-      // Try common paths for Farcaster SDK context, and some guesses for MiniKit
-      const fcContext = farcasterWindow.farcaster?.sdk?.context?.user || 
-                        farcasterWindow.frames?.sdk?.context?.user ||
-                        farcasterWindow.farcaster?.miniKit?.user || // A guess for how MiniKit might expose it
-                        farcasterWindow.miniKit?.user;              // Another guess
+      console.log("Farcaster user context from useMiniKit():", farcasterUser);
 
-      console.log("Farcaster context found:", fcContext);
-
-      if (fcContext) {
-        if (fcContext.pfpUrl) {
-          console.log("Using pfpUrl:", fcContext.pfpUrl);
-          setUserAvatar(fcContext.pfpUrl);
-          avatarSet = true;
-        } else if (fcContext.pfp) {
-          console.log("Using pfp (fallback):", fcContext.pfp);
-          setUserAvatar(fcContext.pfp);
+      if (farcasterUser) {
+        // Standardize property access, Farcaster often uses pfp_url or pfp.url or just pfp
+        const pfpUrl = farcasterUser.pfpUrl || farcasterUser.pfp_url || farcasterUser.pfp?.url || farcasterUser.pfp;
+        if (typeof pfpUrl === 'string' && pfpUrl) {
+          console.log("Using PFP from useMiniKit():", pfpUrl);
+          setUserAvatar(pfpUrl);
           avatarSet = true;
         } else {
-          console.log("Farcaster context found, but no pfpUrl or pfp field.");
+          console.log("User context from useMiniKit() found, but no valid PFP URL string (checked pfpUrl, pfp_url, pfp.url, pfp).");
         }
       } else {
-        console.log("No Farcaster user context found on window object via common paths.");
+        console.log("No Farcaster user context found directly on useMiniKit() return object with common property names.");
       }
     }
 
@@ -98,7 +98,10 @@ export default function App() {
         setUserAvatar('/default-avatar.svg');
       }
     }
-  }, [setFrameReady, isFrameReady]);
+  // Add miniKitData to dependency array if its properties are accessed directly in the effect
+  // and are expected to trigger re-runs if miniKitData itself changes identity.
+  // For now, assuming isFrameReady and setFrameReady are stable or correctly handled by useMiniKit.
+  }, [miniKitData, isFrameReady, setFrameReady]);
 
   useEffect(() => {
     gameOverRef.current = gameOver;
