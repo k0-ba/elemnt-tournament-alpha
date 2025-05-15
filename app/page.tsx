@@ -1,36 +1,16 @@
 "use client";
 
-import {
-  useMiniKit,
-  useAddFrame,
-  useOpenUrl,
-} from "@coinbase/onchainkit/minikit";
-import {
-  Name,
-  Identity,
-  Address,
-  Avatar,
-  EthBalance,
-} from "@coinbase/onchainkit/identity";
-import {
-  ConnectWallet,
-  Wallet,
-  WalletDropdown,
-  WalletDropdownDisconnect,
-} from "@coinbase/onchainkit/wallet";
-import { useEffect, useMemo, useState, useCallback } from "react";
-import { Button } from "./components/DemoComponents";
-import { Icon } from "./components/DemoComponents";
-import { Home } from "./components/DemoComponents";
-import { Features } from "./components/DemoComponents";
+import { useMiniKit } from "@coinbase/onchainkit/minikit";
+import { useEffect, useState } from "react";
+
+// Game elements and rules
+const elements = ['Fire 🔥', 'Earth 🌍', 'Water 💧'];
 
 export default function App() {
-  const { setFrameReady, isFrameReady, context } = useMiniKit();
-  const [frameAdded, setFrameAdded] = useState(false);
-  const [activeTab, setActiveTab] = useState("home");
-
-  const addFrame = useAddFrame();
-  const openUrl = useOpenUrl();
+  const { setFrameReady, isFrameReady } = useMiniKit();
+  const [userChoice, setUserChoice] = useState<string | null>(null);
+  const [aiChoice, setAiChoice] = useState<string | null>(null);
+  const [result, setResult] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isFrameReady) {
@@ -38,78 +18,97 @@ export default function App() {
     }
   }, [setFrameReady, isFrameReady]);
 
-  const handleAddFrame = useCallback(async () => {
-    const frameAdded = await addFrame();
-    setFrameAdded(Boolean(frameAdded));
-  }, [addFrame]);
-
-  const saveFrameButton = useMemo(() => {
-    if (context && !context.client.added) {
-      return (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={handleAddFrame}
-          className="text-[var(--app-accent)] p-4"
-          icon={<Icon name="plus" size="sm" />}
-        >
-          Save Frame
-        </Button>
-      );
+  const handleElementClick = (element: string) => {
+    // User choice
+    setUserChoice(element);
+    
+    // AI makes a random choice
+    const computerChoice = elements[Math.floor(Math.random() * elements.length)];
+    setAiChoice(computerChoice);
+    
+    // Calculate result
+    if (element === computerChoice) {
+      setResult('Tie');
+    } else if (element === 'Fire 🔥' && computerChoice === 'Earth 🌍') {
+      setResult('Win');
+    } else if (element === 'Earth 🌍' && computerChoice === 'Water 💧') {
+      setResult('Win');
+    } else if (element === 'Water 💧' && computerChoice === 'Fire 🔥') {
+      setResult('Win');
+    } else {
+      setResult('Lose');
     }
+  };
 
-    if (frameAdded) {
-      return (
-        <div className="flex items-center space-x-1 text-sm font-medium text-[#0052FF] animate-fade-out">
-          <Icon name="check" size="sm" className="text-[#0052FF]" />
-          <span>Saved</span>
-        </div>
-      );
-    }
-
-    return null;
-  }, [context, frameAdded, handleAddFrame]);
+  const resetGame = () => {
+    setUserChoice(null);
+    setAiChoice(null);
+    setResult(null);
+  };
 
   return (
-    <div className="flex flex-col min-h-screen font-sans text-[var(--app-foreground)] mini-app-theme from-[var(--app-background)] to-[var(--app-gray)]">
-      <div className="w-full max-w-md mx-auto px-4 py-3">
-        <header className="flex justify-between items-center mb-3 h-11">
-          <div>
-            <div className="flex items-center space-x-2">
-              <Wallet className="z-10">
-                <ConnectWallet>
-                  <Name className="text-inherit" />
-                </ConnectWallet>
-                <WalletDropdown>
-                  <Identity className="px-4 pt-3 pb-2" hasCopyAddressOnClick>
-                    <Avatar />
-                    <Name />
-                    <Address />
-                    <EthBalance />
-                  </Identity>
-                  <WalletDropdownDisconnect />
-                </WalletDropdown>
-              </Wallet>
-            </div>
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-900 text-white p-4">
+      <h1 className="text-3xl font-bold mb-8">Elemental Clash: Challenge the AI!</h1>
+      
+      {!userChoice ? (
+        <div className="text-center mb-8">
+          <p className="text-xl mb-4">Pick an element to battle against the AI:</p>
+          <div className="flex flex-wrap justify-center gap-4">
+            {elements.map((element) => (
+              <button
+                key={element}
+                onClick={() => handleElementClick(element)}
+                className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg text-xl transition-colors"
+              >
+                {element}
+              </button>
+            ))}
           </div>
-          <div>{saveFrameButton}</div>
-        </header>
-
-        <main className="flex-1">
-          {activeTab === "home" && <Home setActiveTab={setActiveTab} />}
-          {activeTab === "features" && <Features setActiveTab={setActiveTab} />}
-        </main>
-
-        <footer className="mt-2 pt-4 flex justify-center">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-[var(--ock-text-foreground-muted)] text-xs"
-            onClick={() => openUrl("https://base.org/builders/minikit")}
+        </div>
+      ) : (
+        <div className="text-center mb-8 bg-gray-800 p-6 rounded-lg w-full max-w-md">
+          <p className="text-xl mb-2">
+            You chose: <span className="font-bold text-blue-400">{userChoice}</span>
+          </p>
+          <p className="text-xl mb-4">
+            AI chose: <span className="font-bold text-red-400">{aiChoice}</span>
+          </p>
+          <p className="text-2xl font-bold mb-6">
+            Result: You {result === 'Win' ? (
+              <span className="text-green-400">Win!</span>
+            ) : result === 'Lose' ? (
+              <span className="text-red-400">Lose!</span>
+            ) : (
+              <span className="text-yellow-400">Tie!</span>
+            )}
+          </p>
+          <button
+            onClick={resetGame}
+            className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-6 rounded-lg transition-colors"
           >
-            Built on Base with MiniKit
-          </Button>
-        </footer>
+            Play Again
+          </button>
+        </div>
+      )}
+
+      <div className="bg-gray-800 p-6 rounded-lg max-w-md w-full mt-8">
+        <h2 className="text-xl font-bold mb-4">Game Rules:</h2>
+        <ul className="list-disc pl-5 space-y-2 mb-4">
+          <li>Fire 🔥 beats Earth 🌍</li>
+          <li>Earth 🌍 beats Water 💧</li>
+          <li>Water 💧 beats Fire 🔥</li>
+        </ul>
+        <p className="text-sm text-gray-400">This is Phase 0 (MVP): Play against an AI opponent that makes random choices.</p>
+      </div>
+      
+      <div className="mt-8 text-sm text-gray-500">
+        <a 
+          href="/api/frame" 
+          target="_blank" 
+          className="text-blue-400 hover:underline"
+        >
+          View Farcaster Frame Version
+        </a>
       </div>
     </div>
   );
