@@ -1,6 +1,6 @@
 import React from 'react';
 
-interface HeaderProps {}
+type HeaderProps = Record<string, never>;
 
 const Header: React.FC<HeaderProps> = () => (
   <div className="w-full flex justify-center items-center p-4 mb-4">

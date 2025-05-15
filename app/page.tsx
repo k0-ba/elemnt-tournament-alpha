@@ -54,11 +54,49 @@ export default function App() {
     if (!isFrameReady) {
       setFrameReady();
     }
-    
-    // Try to get user avatar from localStorage or use default
-    const savedAvatar = localStorage.getItem('userAvatar');
-    if (savedAvatar) {
-      setUserAvatar(savedAvatar);
+
+    let avatarSet = false;
+    if (typeof window !== 'undefined') {
+      console.log("Attempting to find Farcaster context...");
+      console.log("window.farcaster:", (window as any).farcaster);
+      console.log("window.frames:", (window as any).frames);
+      console.log("window.miniKit (if @coinbase/onchainkit/minikit exposes it globally):", (window as any).miniKit);
+
+      const farcasterWindow = window as any;
+      // Try common paths for Farcaster SDK context, and some guesses for MiniKit
+      const fcContext = farcasterWindow.farcaster?.sdk?.context?.user || 
+                        farcasterWindow.frames?.sdk?.context?.user ||
+                        farcasterWindow.farcaster?.miniKit?.user || // A guess for how MiniKit might expose it
+                        farcasterWindow.miniKit?.user;              // Another guess
+
+      console.log("Farcaster context found:", fcContext);
+
+      if (fcContext) {
+        if (fcContext.pfpUrl) {
+          console.log("Using pfpUrl:", fcContext.pfpUrl);
+          setUserAvatar(fcContext.pfpUrl);
+          avatarSet = true;
+        } else if (fcContext.pfp) {
+          console.log("Using pfp (fallback):", fcContext.pfp);
+          setUserAvatar(fcContext.pfp);
+          avatarSet = true;
+        } else {
+          console.log("Farcaster context found, but no pfpUrl or pfp field.");
+        }
+      } else {
+        console.log("No Farcaster user context found on window object via common paths.");
+      }
+    }
+
+    if (!avatarSet) {
+      console.log("Falling back to localStorage for avatar.");
+      const storedAvatar = localStorage.getItem('userAvatar');
+      if (storedAvatar) {
+        setUserAvatar(storedAvatar);
+      } else {
+        console.log("Using default avatar.");
+        setUserAvatar('/default-avatar.svg');
+      }
     }
   }, [setFrameReady, isFrameReady]);
 
@@ -207,7 +245,7 @@ export default function App() {
                   >
                     {aiChoice ? aiChoice.split(' ')[1] : '?'}
                   </div>
-                  <p className="mt-2 text-xs sm:text-sm">AI's Choice</p>
+                  <p className="mt-2 text-xs sm:text-sm">AI&apos;s Choice</p>
                 </div>
               </div>
 
@@ -220,7 +258,7 @@ export default function App() {
                   <p className="text-md sm:text-lg mb-3 sm:mb-4 text-gray-400 italic">Next round in a moment...</p>
                 )}
                 {gameOver && (
-                   <p className="text-md sm:text-lg mb-3 sm:mb-4 text-gray-400 italic">Game Over. Select 'Play Again?' below.</p>
+                   <p className="text-md sm:text-lg mb-3 sm:mb-4 text-gray-400 italic">Game Over. Select &apos;Play Again?&apos; below.</p>
                 )}
                 <div className="flex justify-center gap-2 sm:gap-4 mb-2 sm:mb-4">
                   {elements.map((element) => (
