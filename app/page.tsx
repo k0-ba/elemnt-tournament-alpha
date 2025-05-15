@@ -65,10 +65,15 @@ export default function App() {
       // Speculative access based on potential structure of miniKitData
       // We need to inspect the log of `miniKitData` to confirm the actual path.
       // Common Farcaster user object structures might include 'user', 'farcasterUser', 'profile', 'viewerContext'
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const farcasterUser = (miniKitData as any)?.user || 
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
                             (miniKitData as any)?.farcasterUser || 
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
                             (miniKitData as any)?.profile || 
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
                             (miniKitData as any)?.viewerContext || 
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
                             (miniKitData as any)?.frameInfo?.user; // Another common pattern in frame contexts
 
       console.log("Farcaster user context from useMiniKit():", farcasterUser);
