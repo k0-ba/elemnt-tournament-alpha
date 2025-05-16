@@ -43,6 +43,7 @@ export default function App() {
   const [battleLogs, setBattleLogs] = useState<BattleLogEntry[]>([]);
 
   const [userAvatar, setUserAvatar] = useState('/default-avatar.svg');
+  const [userDisplayName, setUserDisplayName] = useState('Player');
   const [gameOver, setGameOver] = useState(false);
   // We still need setSelectedElement but can mark selectedElement as unused
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -59,12 +60,12 @@ export default function App() {
     }
 
     let avatarSet = false;
+    let nameSet = false;
+    
     if (typeof window !== 'undefined') { // Keep client-side check for localStorage mainly
       console.log("Attempting to find Farcaster context via useMiniKit()...");
       
-      // Speculative access based on potential structure of miniKitData
-      // We need to inspect the log of `miniKitData` to confirm the actual path.
-      // Common Farcaster user object structures might include 'user', 'farcasterUser', 'profile', 'viewerContext'
+      // Try different possible paths for the user object in the MiniKit data
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const farcasterUser = (miniKitData as any)?.user || 
                             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -74,25 +75,37 @@ export default function App() {
                             // eslint-disable-next-line @typescript-eslint/no-explicit-any
                             (miniKitData as any)?.viewerContext || 
                             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                            (miniKitData as any)?.frameInfo?.user; // Another common pattern in frame contexts
+                            (miniKitData as any)?.frameInfo?.user;
 
       console.log("Farcaster user context from useMiniKit():", farcasterUser);
 
       if (farcasterUser) {
-        // Standardize property access, Farcaster often uses pfp_url or pfp.url or just pfp
+        // Set user display name (username or displayName)
+        const displayName = farcasterUser.displayName || 
+                          farcasterUser.username || 
+                          `User ${farcasterUser.fid || ''}`.trim();
+        
+        if (displayName) {
+          console.log("Using display name from useMiniKit():", displayName);
+          setUserDisplayName(displayName);
+          nameSet = true;
+        }
+
+        // Set user avatar (profile picture)
         const pfpUrl = farcasterUser.pfpUrl || farcasterUser.pfp_url || farcasterUser.pfp?.url || farcasterUser.pfp;
         if (typeof pfpUrl === 'string' && pfpUrl) {
           console.log("Using PFP from useMiniKit():", pfpUrl);
           setUserAvatar(pfpUrl);
           avatarSet = true;
         } else {
-          console.log("User context from useMiniKit() found, but no valid PFP URL string (checked pfpUrl, pfp_url, pfp.url, pfp).");
+          console.log("User context from useMiniKit() found, but no valid PFP URL string.");
         }
       } else {
-        console.log("No Farcaster user context found directly on useMiniKit() return object with common property names.");
+        console.log("No Farcaster user context found in useMiniKit() return object.");
       }
     }
 
+    // Fallback to localStorage for avatar if not set from MiniKit
     if (!avatarSet) {
       console.log("Falling back to localStorage for avatar.");
       const storedAvatar = localStorage.getItem('userAvatar');
@@ -101,6 +114,17 @@ export default function App() {
       } else {
         console.log("Using default avatar.");
         setUserAvatar('/default-avatar.svg');
+      }
+    }
+    
+    // Fallback to localStorage for display name if not set from MiniKit
+    if (!nameSet) {
+      const storedName = localStorage.getItem('userDisplayName');
+      if (storedName) {
+        setUserDisplayName(storedName);
+      } else {
+        console.log("Using default display name.");
+        setUserDisplayName('Player');
       }
     }
   // Add miniKitData to dependency array if its properties are accessed directly in the effect
@@ -198,7 +222,7 @@ export default function App() {
       <HealthDisplay 
         userHP={userHealth} 
         aiHP={aiHealth} 
-        userName="Player"
+        userName={userDisplayName}
         aiName="AI Opponent"
         userAvatar={userAvatar}
         // aiAvatar={aiAvatar} // Placeholder for AI avatar if added later

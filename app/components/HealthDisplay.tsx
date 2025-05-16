@@ -8,14 +8,21 @@ interface HealthBarProps {
 }
 
 const HealthBar: React.FC<HealthBarProps> = ({ currentHP, maxHP, isUser }) => {
-  const percentage = Math.max(0, (currentHP / maxHP) * 100); // Ensure percentage doesn't go below 0
-  const barColor = isUser ? 'bg-emerald-600' : 'bg-rose-600';
+  const percentage = Math.max(0, (currentHP / maxHP) * 100);
+  const barColor = isUser ? 'from-emerald-500 to-emerald-400' : 'from-rose-500 to-rose-400';
+  const bgColor = isUser ? 'bg-emerald-900/30' : 'bg-rose-900/30';
 
   return (
-    <div className="w-full h-3 sm:h-4 bg-gray-700 rounded-full overflow-hidden border border-[#3F3351] my-1">
+    <div className={`w-full h-2.5 rounded-full overflow-hidden ${bgColor} border border-[#3F3351]/50`}>
       <div 
-        className={`h-full ${barColor} transition-all duration-300 ease-out`}
-        style={{ width: `${percentage}%` }}
+        className={`h-full bg-gradient-to-r ${barColor} transition-all duration-500 ease-out`}
+        style={{ 
+          width: `${percentage}%`,
+          borderRadius: '9999px',
+          boxShadow: isUser 
+            ? '0 0 8px rgba(16, 185, 129, 0.5)' 
+            : '0 0 8px rgba(244, 63, 94, 0.5)'
+        }}
       ></div>
     </div>
   );
@@ -35,33 +42,39 @@ const HealthDisplay: React.FC<HealthDisplayProps> = ({ userHP, aiHP, userName, a
   const maxHP = 5; // Max HP for the game
 
   return (
-    <div className="w-full max-w-3xl flex items-start justify-between p-3 sm:p-4 mb-2 sm:mb-4 bg-[#2E233D] rounded-xl shadow-lg">
+    <div className="w-full max-w-3xl flex items-start justify-between p-4 sm:p-5 mb-3 sm:mb-5 bg-[#24153B] rounded-xl border border-[#3F3351] shadow-lg">
       {/* Player Section (Left) */}
-      <div className="flex-1 flex flex-col items-center text-center px-1 sm:px-2 max-w-[40%]">
+      <div className="flex-1 flex flex-col items-center px-1 sm:px-2 max-w-[40%]">
         <PlayerStatus 
           playerName={userName || 'Player'} 
-          avatarUrl={userAvatar} // Already has a default in page.tsx if not set by user
+          avatarUrl={userAvatar}
           isUser={true} 
           onAvatarChange={onAvatarChange} 
         />
-        <HealthBar currentHP={userHP} maxHP={maxHP} isUser={true} />
-        <p className="text-xs sm:text-sm text-gray-300 mt-1">HP: {userHP}/{maxHP}</p>
+        <div className="w-full mt-2">
+          <HealthBar currentHP={userHP} maxHP={maxHP} isUser={true} />
+          <p className="text-xs text-gray-300 mt-1">HP: {userHP}/{maxHP}</p>
+        </div>
       </div>
 
       {/* VS Separator (Center) */}
-      <div className="px-1 sm:px-3 flex items-center h-full pt-8 sm:pt-10">
-        <p className="text-lg sm:text-2xl font-bold text-gray-400">VS</p>
+      <div className="px-2 sm:px-3 flex items-center h-full pt-10 sm:pt-12">
+        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[#2A2A2A] border-2 border-[#3F3351] flex items-center justify-center">
+          <p className="text-sm sm:text-lg font-bold text-gray-400">VS</p>
+        </div>
       </div>
 
       {/* AI Section (Right) */}
-      <div className="flex-1 flex flex-col items-center text-center px-1 sm:px-2 max-w-[40%]">
+      <div className="flex-1 flex flex-col items-center px-1 sm:px-2 max-w-[40%]">
         <PlayerStatus 
           playerName={aiName || 'AI Opponent'} 
-          avatarUrl={'/images/ai-avatar.png'} // Standard AI avatar path
+          avatarUrl={'/images/ai-avatar.png'}
           isUser={false} 
         />
-        <HealthBar currentHP={aiHP} maxHP={maxHP} isUser={false} />
-        <p className="text-xs sm:text-sm text-gray-300 mt-1">HP: {aiHP}/{maxHP}</p>
+        <div className="w-full mt-2">
+          <HealthBar currentHP={aiHP} maxHP={maxHP} isUser={false} />
+          <p className="text-xs text-gray-300 mt-1">HP: {aiHP}/{maxHP}</p>
+        </div>
       </div>
     </div>
   );
