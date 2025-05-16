@@ -39,3 +39,4 @@ const GameRules: React.FC = () => {
 };
 
 export default GameRules;
+//.
